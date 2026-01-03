@@ -8,10 +8,15 @@ import {
 } from './constants';
 import { Score, RankingEntry, User, Guess, Draw } from './types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// A inicialização é feita sob demanda para evitar erros de ReferenceError em alguns browsers
+const getAI = () => {
+  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
+  return new GoogleGenAI({ apiKey: apiKey || '' });
+};
 
 export const generateAIGuess = async (): Promise<number[]> => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: "Gere 12 números aleatórios e únicos entre 1 e 60 para um sorteio da Mega-Sena. Retorne apenas os números separados por vírgula, sem texto adicional.",
