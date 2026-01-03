@@ -3,18 +3,25 @@ import {
   ADMIN_FEE_PERCENT, 
   RESERVE_FEE_PERCENT, 
   PRIZE_POOL_PERCENT, 
-  PRIZE_DISTRIBUTION 
+  PRIZE_DISTRIBUTION,
+  APP_PLATFORM_FEE
 } from './constants';
 import { Score, RankingEntry, User, Guess, Draw } from './types';
 
 export const calculateFinances = (participantsCount: number, pricePerPerson: number) => {
-  const totalCollected = participantsCount * pricePerPerson;
-  const adminFee = totalCollected * ADMIN_FEE_PERCENT;
-  const reserveFee = totalCollected * RESERVE_FEE_PERCENT;
-  const weeklyPrizePool = totalCollected * PRIZE_POOL_PERCENT;
+  const totalCollectedRaw = participantsCount * pricePerPerson;
+  // A taxa do app é retirada do valor total (R$ 10 por participante)
+  const appTotalFee = participantsCount * APP_PLATFORM_FEE;
+  const totalForPool = totalCollectedRaw - appTotalFee;
+  
+  const adminFee = totalForPool * ADMIN_FEE_PERCENT;
+  const reserveFee = totalForPool * RESERVE_FEE_PERCENT;
+  const weeklyPrizePool = totalForPool * PRIZE_POOL_PERCENT;
 
   return {
-    totalCollected,
+    totalCollected: totalCollectedRaw,
+    appFee: appTotalFee,
+    poolNetValue: totalForPool,
     adminFee,
     reserveFee,
     weeklyPrizePool,
@@ -43,12 +50,6 @@ export const generateRanking = (
   const sortedScores = [...scores].sort((a, b) => b.totalScore - a.totalScore);
   const distinctScores = Array.from(new Set(sortedScores.map(s => s.totalScore))).sort((a, b) => b - a);
 
-  const finances = {
-    tier1: poolTotalPrize * PRIZE_DISTRIBUTION.TIER_1,
-    tier2: poolTotalPrize * PRIZE_DISTRIBUTION.TIER_2,
-    tier3: poolTotalPrize * PRIZE_DISTRIBUTION.TIER_3,
-  };
-
   const ranking: RankingEntry[] = [];
   const addEntries = (tierIndex: number, totalTierPrize: number) => {
     const targetScore = distinctScores[tierIndex];
@@ -66,16 +67,10 @@ export const generateRanking = (
     });
   };
 
-  addEntries(0, finances.tier1);
-  addEntries(1, finances.tier2);
-  addEntries(2, finances.tier3);
+  addEntries(0, poolTotalPrize * PRIZE_DISTRIBUTION.TIER_1);
+  addEntries(1, poolTotalPrize * PRIZE_DISTRIBUTION.TIER_2);
+  addEntries(2, poolTotalPrize * PRIZE_DISTRIBUTION.TIER_3);
 
-  sortedScores.forEach(s => {
-    if (!ranking.find(r => r.userId === s.userId)) {
-      const user = users.find(u => u.id === s.userId);
-      ranking.push({ ...s, userName: user?.name || `Usuário ${s.userId.substring(0, 5)}`, rank: 0, prizeValue: 0 });
-    }
-  });
   return ranking;
 };
 

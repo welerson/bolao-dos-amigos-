@@ -1,4 +1,9 @@
 
+export enum GameType {
+  MEGA_SENA = 'MEGA_SENA',
+  LOTOFACIL = 'LOTOFACIL'
+}
+
 export enum PoolCapacity {
   A = 100,
   B = 300,
@@ -24,7 +29,7 @@ export interface User {
 export interface Draw {
   id: number; // 1, 2, or 3
   date: string;
-  numbers: number[]; // 6 numbers
+  numbers: number[]; 
 }
 
 export interface AccessCode {
@@ -39,6 +44,7 @@ export interface Pool {
   id: string;
   name: string;
   description: string;
+  gameType: GameType;
   capacity: PoolCapacity;
   price: number;
   status: PoolStatus;
@@ -52,28 +58,18 @@ export interface Guess {
   id: string;
   poolId: string;
   userId: string;
-  userName?: string; // Nome do usuário para o Admin identificar
-  numbers: number[]; // 18 numbers
+  userName?: string;
+  numbers: number[];
 }
 
 export interface Score {
   userId: string;
-  drawScores: number[]; // scores for each of the 3 draws
+  drawScores: number[];
   totalScore: number;
-}
-
-export interface FinancialReport {
-  totalCollected: number;
-  adminFee: number;
-  reserveFee: number;
-  weeklyPrizePool: number;
-  tier1Total: number;
-  tier2Total: number;
-  tier3Total: number;
 }
 
 export interface RankingEntry extends Score {
   userName: string;
-  rank: number; // 1, 2, or 3
+  rank: number;
   prizeValue: number;
 }
