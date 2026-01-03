@@ -8,7 +8,6 @@ import {
 } from './constants';
 import { Score, RankingEntry, User, Guess, Draw } from './types';
 
-// A inicialização é feita sob demanda para evitar erros de ReferenceError em alguns browsers
 const getAI = () => {
   const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
   return new GoogleGenAI({ apiKey: apiKey || '' });
@@ -19,14 +18,14 @@ export const generateAIGuess = async (): Promise<number[]> => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: "Gere 12 números aleatórios e únicos entre 1 e 60 para um sorteio da Mega-Sena. Retorne apenas os números separados por vírgula, sem texto adicional.",
+      contents: "Gere 18 números aleatórios e únicos entre 1 e 60 para um sorteio da Mega-Sena. Retorne apenas os números separados por vírgula, sem texto adicional.",
     });
     const text = response.text || "";
     const numbers = text.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 60);
-    return numbers.slice(0, 12).sort((a, b) => a - b);
+    return numbers.slice(0, 18).sort((a, b) => a - b);
   } catch (error) {
     console.error("Gemini Error:", error);
-    return Array.from({ length: 12 }, () => Math.floor(Math.random() * 60) + 1).sort((a, b) => a - b);
+    return Array.from({ length: 18 }, () => Math.floor(Math.random() * 60) + 1).sort((a, b) => a - b);
   }
 };
 

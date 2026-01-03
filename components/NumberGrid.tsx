@@ -12,7 +12,7 @@ export const NumberGrid: React.FC<NumberGridProps> = ({ selected, onChange, disa
     if (disabled) return;
     if (selected.includes(num)) {
       onChange(selected.filter(n => n !== num));
-    } else if (selected.length < 12) {
+    } else if (selected.length < 18) {
       onChange([...selected, num]);
     }
   };

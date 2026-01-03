@@ -27,6 +27,14 @@ export interface Draw {
   numbers: number[]; // 6 numbers
 }
 
+export interface AccessCode {
+  id: string;
+  code: string;
+  poolId: string;
+  used: boolean;
+  usedBy?: string;
+}
+
 export interface Pool {
   id: string;
   name: string;
@@ -44,7 +52,7 @@ export interface Guess {
   id: string;
   poolId: string;
   userId: string;
-  numbers: number[]; // 12 numbers
+  numbers: number[]; // 18 numbers
 }
 
 export interface Score {

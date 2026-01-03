@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { collection, onSnapshot, query, doc, setDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, setDoc, getDoc, updateDoc, arrayUnion, where, getDocs, limit } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { User, Pool, PoolStatus, Guess } from './types';
 import Login from './views/Login';
@@ -18,16 +18,13 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<{id: number, msg: string}[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // 1. Monitorar estado de autenticação e buscar Perfil no Firestore
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        // Busca dados adicionais (como isAdmin) no Firestore
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (userDoc.exists()) {
           setCurrentUser(userDoc.data() as User);
         } else {
-          // Caso o documento não exista (falha na criação), cria um perfil básico
           const basicUser: User = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || 'Participante',
@@ -48,7 +45,6 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Sincronizar Bolões
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, 'pools'));
@@ -59,7 +55,6 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [currentUser]);
 
-  // 3. Sincronizar Palpites
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, 'guesses'));
@@ -73,33 +68,54 @@ const App: React.FC = () => {
   const addNotification = (msg: string) => {
     const id = Date.now();
     setNotifications(prev => [...prev, { id, msg }]);
-    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 3000);
+    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
   };
 
   const addPool = async (pool: Pool) => {
     try {
       await setDoc(doc(db, 'pools', pool.id), pool);
-      addNotification("Bolão criado com sucesso!");
+      addNotification("Bolão criado! Gere os códigos para convidar.");
     } catch (e) {
       addNotification("Erro ao criar bolão.");
     }
   };
 
-  const joinPool = async (poolId: string) => {
+  const joinPoolWithCode = async (poolId: string, code: string) => {
     if (!currentUser) return;
     try {
-      const poolRef = doc(db, 'pools', poolId);
       const pool = pools.find(p => p.id === poolId);
-      if (pool && !pool.participantsIds.includes(currentUser.id)) {
-        const isFull = pool.participantsIds.length + 1 >= pool.capacity;
-        await updateDoc(poolRef, {
-          participantsIds: arrayUnion(currentUser.id),
-          status: isFull ? PoolStatus.FULL : pool.status
-        });
-        addNotification("Você entrou no bolão!");
+      if (!pool) return;
+
+      // 1. Validar se o código existe e não foi usado
+      const codesRef = collection(db, 'pool_codes');
+      const q = query(codesRef, where('code', '==', code), where('poolId', '==', poolId), where('used', '==', false), limit(1));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        addNotification("Código inválido ou já utilizado!");
+        return;
       }
+
+      const codeDoc = querySnapshot.docs[0];
+      const poolRef = doc(db, 'pools', poolId);
+
+      // 2. Marcar código como usado
+      await updateDoc(doc(db, 'pool_codes', codeDoc.id), {
+        used: true,
+        usedBy: currentUser.id
+      });
+
+      // 3. Adicionar usuário ao bolão
+      const isFull = pool.participantsIds.length + 1 >= pool.capacity;
+      await updateDoc(poolRef, {
+        participantsIds: arrayUnion(currentUser.id),
+        status: isFull ? PoolStatus.FULL : pool.status
+      });
+
+      addNotification("Bem-vindo ao grupo! Código validado.");
     } catch (e) {
-      addNotification("Erro ao entrar no bolão.");
+      console.error(e);
+      addNotification("Erro ao validar código.");
     }
   };
 
@@ -107,7 +123,7 @@ const App: React.FC = () => {
     try {
       const guessId = `${guess.poolId}_${guess.userId}`;
       await setDoc(doc(db, 'guesses', guessId), guess);
-      addNotification("Seu palpite foi registrado!");
+      addNotification("Seu palpite de 18 números foi salvo!");
     } catch (e) {
       addNotification("Erro ao salvar palpite.");
     }
@@ -116,7 +132,7 @@ const App: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-emerald-700 text-white font-bold">
-        Carregando...
+        Iniciando Bolão...
       </div>
     );
   }
@@ -126,7 +142,7 @@ const App: React.FC = () => {
       <div className="min-h-screen max-w-md mx-auto bg-gray-50 flex flex-col shadow-2xl relative overflow-hidden">
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[320px] pointer-events-none flex flex-col gap-2">
           {notifications.map(n => (
-            <div key={n.id} className="bg-emerald-900/90 backdrop-blur text-white px-4 py-3 rounded-2xl text-sm font-bold shadow-xl text-center">
+            <div key={n.id} className="bg-emerald-900/95 backdrop-blur-md text-white px-5 py-4 rounded-3xl text-sm font-bold shadow-2xl text-center border border-white/10 animate-in slide-in-from-top duration-300">
               {n.msg}
             </div>
           ))}
@@ -135,7 +151,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={currentUser ? <Navigate to="/home" /> : <Login onLogin={setCurrentUser} />} />
           <Route path="/home" element={currentUser ? <Home user={currentUser} activePools={pools.filter(p => p.participantsIds.includes(currentUser?.id || ''))} /> : <Navigate to="/" />} />
-          <Route path="/pools" element={currentUser ? <PoolList pools={pools} onJoin={joinPool} userId={currentUser?.id} /> : <Navigate to="/" />} />
+          <Route path="/pools" element={currentUser ? <PoolList pools={pools} onJoin={joinPoolWithCode} userId={currentUser?.id} /> : <Navigate to="/" />} />
           <Route path="/create" element={currentUser?.isAdmin ? <CreatePool onCreated={addPool} adminId={currentUser?.id || ''} /> : <Navigate to="/home" />} />
           <Route path="/pool/:id" element={currentUser ? <PoolDetail pools={pools} setPools={setPools} guesses={guesses} onSaveGuess={saveGuess} userId={currentUser?.id || ''} notify={addNotification} isAdmin={currentUser.isAdmin} /> : <Navigate to="/" />} />
           <Route path="/how-it-works" element={currentUser ? <HowItWorks /> : <Navigate to="/" />} />
