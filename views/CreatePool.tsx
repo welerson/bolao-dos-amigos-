@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pool, PoolCapacity, PoolStatus, GameType } from '../types';
+import { Pool, PoolCapacity, PoolStatus, GameType, PoolBetType } from '../types';
 import { GAME_CONFIG, APP_PLATFORM_FEE } from '../constants';
 import { formatCurrency } from '../utils';
 
@@ -16,17 +16,18 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
     name: '',
     description: '',
     gameType: GameType.MEGA_SENA,
-    requiredPicks: 18,
+    betType: PoolBetType.INDIVIDUAL,
+    requiredPicks: 6,
+    officialTicketSize: 6,
     capacity: PoolCapacity.A,
     price: 50,
   });
 
-  // Ajusta o padrão de números quando o tipo de jogo muda
   useEffect(() => {
     if (formData.gameType === GameType.LOTOFACIL) {
-      setFormData(prev => ({ ...prev, requiredPicks: 15 }));
+      setFormData(prev => ({ ...prev, requiredPicks: 15, officialTicketSize: 15 }));
     } else {
-      setFormData(prev => ({ ...prev, requiredPicks: 6 }));
+      setFormData(prev => ({ ...prev, requiredPicks: 6, officialTicketSize: 6 }));
     }
   }, [formData.gameType]);
 
@@ -37,9 +38,11 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
       name: formData.name,
       description: formData.description,
       gameType: formData.gameType,
+      betType: formData.betType,
       requiredPicks: formData.requiredPicks,
+      officialTicketSize: formData.officialTicketSize,
       capacity: formData.capacity,
-      price: formData.price + APP_PLATFORM_FEE, // Admin define o valor base e somamos a taxa
+      price: formData.price + APP_PLATFORM_FEE,
       status: PoolStatus.AWAITING,
       participantsIds: [adminId],
       draws: [
@@ -55,6 +58,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
   };
 
   const isMega = formData.gameType === GameType.MEGA_SENA;
+  const isColab = formData.betType === PoolBetType.COLLABORATIVE;
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 h-screen overflow-y-auto pb-24 no-scrollbar">
@@ -67,7 +71,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
 
       <form onSubmit={handleSubmit} className="p-6 space-y-8">
         <section className="space-y-4">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Modalidade</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Modalidade e Tipo de Jogo</label>
           <div className="grid grid-cols-2 gap-4">
             <button
               type="button"
@@ -92,6 +96,32 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
           </div>
         </section>
 
+        <section className="space-y-4">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Estratégia de Aposta</label>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setFormData({...formData, betType: PoolBetType.INDIVIDUAL})}
+              className={`p-4 rounded-3xl border-2 transition-all text-center ${
+                !isColab ? 'border-gray-800 bg-gray-800 text-white shadow-lg' : 'border-transparent bg-white text-gray-400'
+              }`}
+            >
+              <span className="font-black text-[10px] uppercase block mb-1">Individual</span>
+              <p className="text-[8px] leading-tight">Cada um joga seu bilhete simples.</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormData({...formData, betType: PoolBetType.COLLABORATIVE})}
+              className={`p-4 rounded-3xl border-2 transition-all text-center ${
+                isColab ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg' : 'border-transparent bg-white text-gray-400'
+              }`}
+            >
+              <span className="font-black text-[10px] uppercase block mb-1">Mais Votados</span>
+              <p className="text-[8px] leading-tight">O sistema gera o bilhete oficial com os mais marcados.</p>
+            </button>
+          </div>
+        </section>
+
         <section className="space-y-6 bg-white p-8 rounded-[40px] shadow-sm border border-gray-100">
           <div>
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Nome do Grupo</label>
@@ -99,7 +129,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
               required
               type="text" 
               className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold focus:border-emerald-500 outline-none transition-all" 
-              placeholder="Ex: Família & Amigos"
+              placeholder="Ex: Mega Master 14"
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
             />
@@ -107,7 +137,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Números p/ Jogo</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Votos p/ Usuário</label>
               <input 
                 required
                 type="number" 
@@ -117,20 +147,33 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
                 value={formData.requiredPicks}
                 onChange={e => setFormData({...formData, requiredPicks: Number(e.target.value)})}
               />
-              <p className="text-[8px] text-center mt-2 font-bold text-gray-300">Min: {isMega ? '6' : '15'} | Max: 20</p>
             </div>
             <div>
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Valor Cota (Base)</label>
-              <div className="relative">
-                <input 
-                  required
-                  type="number" 
-                  className="w-full p-4 pl-10 bg-gray-50 border-2 border-transparent rounded-2xl font-black text-center focus:border-emerald-500 outline-none transition-all" 
-                  value={formData.price}
-                  onChange={e => setFormData({...formData, price: Number(e.target.value)})}
-                />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-gray-300 text-xs">R$</span>
-              </div>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Bilhete Oficial</label>
+              <input 
+                required
+                disabled={!isColab}
+                type="number" 
+                min={isMega ? 6 : 15}
+                max={20}
+                className={`w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-black text-center focus:border-emerald-500 outline-none transition-all ${!isColab ? 'opacity-30' : ''}`} 
+                value={isColab ? formData.officialTicketSize : formData.requiredPicks}
+                onChange={e => setFormData({...formData, officialTicketSize: Number(e.target.value)})}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Valor do Jogo (Base)</label>
+            <div className="relative">
+              <input 
+                required
+                type="number" 
+                className="w-full p-4 pl-10 bg-gray-50 border-2 border-transparent rounded-2xl font-black text-center focus:border-emerald-500 outline-none transition-all" 
+                value={formData.price}
+                onChange={e => setFormData({...formData, price: Number(e.target.value)})}
+              />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-gray-300 text-xs">R$</span>
             </div>
           </div>
         </section>
@@ -139,7 +182,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 opacity-50">Resumo Financeiro por Cota</h4>
            <div className="space-y-3">
               <div className="flex justify-between items-center text-sm">
-                <span className="opacity-70">Valor Admin</span>
+                <span className="opacity-70">Valor do Jogo</span>
                 <span className="font-bold">{formatCurrency(formData.price)}</span>
               </div>
               <div className="flex justify-between items-center text-sm">

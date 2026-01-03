@@ -4,6 +4,11 @@ export enum GameType {
   LOTOFACIL = 'LOTOFACIL'
 }
 
+export enum PoolBetType {
+  INDIVIDUAL = 'INDIVIDUAL',
+  COLLABORATIVE = 'COLLABORATIVE' // Números mais marcados pelos participantes
+}
+
 export enum PoolCapacity {
   A = 100,
   B = 300,
@@ -45,7 +50,9 @@ export interface Pool {
   name: string;
   description: string;
   gameType: GameType;
-  requiredPicks: number; // Campo adicionado para o admin definir
+  betType: PoolBetType;
+  requiredPicks: number; // Quantos números o usuário marca
+  officialTicketSize: number; // Tamanho do bilhete oficial (ex: 14 números)
   capacity: PoolCapacity;
   price: number;
   status: PoolStatus;
