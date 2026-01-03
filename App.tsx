@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { collection, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { User, Pool, PoolStatus, Guess } from './types';
@@ -16,8 +16,9 @@ const App: React.FC = () => {
   const [pools, setPools] = useState<Pool[]>([]);
   const [guesses, setGuesses] = useState<Guess[]>([]);
   const [notifications, setNotifications] = useState<{id: number, msg: string}[]>([]);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // Monitorar Usuário (Firebase Auth)
+  // 1. Monitorar estado de autenticação
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -30,30 +31,50 @@ const App: React.FC = () => {
         });
       } else {
         setCurrentUser(null);
+        setPools([]);
+        setGuesses([]);
       }
+      setAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // Sincronizar Bolões do Firestore
+  // 2. Sincronizar Bolões - APENAS se houver usuário logado
   useEffect(() => {
+    if (!currentUser) return;
+
     const q = query(collection(db, 'pools'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const poolsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pool));
-      setPools(poolsData);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const poolsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pool));
+        setPools(poolsData);
+      },
+      (error) => {
+        console.error("Erro no listener de pools:", error);
+        if (error.code === 'permission-denied') {
+          // Silencia o erro de permissão no console se o usuário for desconectado
+        }
+      }
+    );
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
-  // Sincronizar Palpites do Firestore
+  // 3. Sincronizar Palpites - APENAS se houver usuário logado
   useEffect(() => {
+    if (!currentUser) return;
+
     const q = query(collection(db, 'guesses'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const guessesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Guess));
-      setGuesses(guessesData);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const guessesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Guess));
+        setGuesses(guessesData);
+      },
+      (error) => {
+        console.error("Erro no listener de guesses:", error);
+      }
+    );
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const addNotification = (msg: string) => {
     const id = Date.now();
@@ -98,6 +119,17 @@ const App: React.FC = () => {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-emerald-700 text-white">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="font-bold">Iniciando Bolão...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Router>
       <div className="min-h-screen max-w-md mx-auto bg-gray-50 flex flex-col shadow-2xl relative overflow-hidden border-x border-gray-200">
@@ -110,12 +142,12 @@ const App: React.FC = () => {
         </div>
 
         <Routes>
-          <Route path="/" element={<Login onLogin={setCurrentUser} />} />
-          <Route path="/home" element={<Home user={currentUser} activePools={pools.filter(p => p.participantsIds.includes(currentUser?.id || ''))} />} />
-          <Route path="/pools" element={<PoolList pools={pools} onJoin={joinPool} userId={currentUser?.id} />} />
-          <Route path="/create" element={<CreatePool onCreated={addPool} adminId={currentUser?.id || ''} />} />
-          <Route path="/pool/:id" element={<PoolDetail pools={pools} setPools={setPools} guesses={guesses} onSaveGuess={saveGuess} userId={currentUser?.id || ''} notify={addNotification} />} />
-          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/" element={currentUser ? <Navigate to="/home" /> : <Login onLogin={setCurrentUser} />} />
+          <Route path="/home" element={currentUser ? <Home user={currentUser} activePools={pools.filter(p => p.participantsIds.includes(currentUser?.id || ''))} /> : <Navigate to="/" />} />
+          <Route path="/pools" element={currentUser ? <PoolList pools={pools} onJoin={joinPool} userId={currentUser?.id} /> : <Navigate to="/" />} />
+          <Route path="/create" element={currentUser ? <CreatePool onCreated={addPool} adminId={currentUser?.id || ''} /> : <Navigate to="/" />} />
+          <Route path="/pool/:id" element={currentUser ? <PoolDetail pools={pools} setPools={setPools} guesses={guesses} onSaveGuess={saveGuess} userId={currentUser?.id || ''} notify={addNotification} /> : <Navigate to="/" />} />
+          <Route path="/how-it-works" element={currentUser ? <HowItWorks /> : <Navigate to="/" />} />
         </Routes>
       </div>
     </Router>
