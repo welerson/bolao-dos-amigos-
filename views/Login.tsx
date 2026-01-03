@@ -1,6 +1,8 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { auth } from '../firebase';
 import { User } from '../types';
 
 interface LoginProps {
@@ -10,18 +12,41 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, validate credentials
-    onLogin({
-      id: 'user-1',
-      name: 'Usuário Teste',
-      email: 'teste@bolao.com',
-      phone: '11999999999',
-      isAdmin: true
-    });
-    navigate('/home');
+    setLoading(true);
+    try {
+      if (isLogin) {
+        const res = await signInWithEmailAndPassword(auth, email, password);
+        onLogin({
+          id: res.user.uid,
+          name: res.user.displayName || 'Usuário',
+          email: res.user.email || '',
+          phone: '',
+          isAdmin: false
+        });
+      } else {
+        const res = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(res.user, { displayName: name });
+        onLogin({
+          id: res.user.uid,
+          name: name,
+          email: email,
+          phone: '',
+          isAdmin: false
+        });
+      }
+      navigate('/home');
+    } catch (error: any) {
+      alert("Erro: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -43,32 +68,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           {!isLogin && (
             <div>
               <label className="text-sm font-semibold text-gray-600 block mb-1">Nome Completo</label>
-              <input required type="text" className="w-full p-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Ex: João Silva" />
+              <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" placeholder="Ex: João Silva" />
             </div>
           )}
           <div>
-            <label className="text-sm font-semibold text-gray-600 block mb-1">E-mail ou Telefone</label>
-            <input required type="text" className="w-full p-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="seu@email.com" />
+            <label className="text-sm font-semibold text-gray-600 block mb-1">E-mail</label>
+            <input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" placeholder="seu@email.com" />
           </div>
           <div>
             <label className="text-sm font-semibold text-gray-600 block mb-1">Senha</label>
-            <input required type="password" title="Senha" className="w-full p-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="••••••••" />
+            <input required type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 rounded-xl border border-gray-200" placeholder="••••••••" />
           </div>
           
-          <div className="flex items-center gap-2 py-2">
-            <input type="checkbox" id="terms" required className="w-4 h-4 text-emerald-600" />
-            <label htmlFor="terms" className="text-xs text-gray-500">Aceito os termos e condições de uso</label>
-          </div>
-
-          <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-emerald-700 active:scale-95 transition-all">
-            {isLogin ? 'Entrar' : 'Cadastrar'}
+          <button type="submit" disabled={loading} className="w-full bg-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-emerald-700 transition-all">
+            {loading ? 'Processando...' : (isLogin ? 'Entrar' : 'Cadastrar')}
           </button>
         </form>
 
-        <button 
-          onClick={() => setIsLogin(!isLogin)}
-          className="w-full mt-6 text-emerald-600 font-semibold text-sm text-center"
-        >
+        <button onClick={() => setIsLogin(!isLogin)} className="w-full mt-6 text-emerald-600 font-semibold text-sm text-center">
           {isLogin ? 'Não tem conta? Cadastre-se' : 'Já tem conta? Faça Login'}
         </button>
       </div>

@@ -1,11 +1,29 @@
 
+import { GoogleGenAI } from "@google/genai";
 import { 
   ADMIN_FEE_PERCENT, 
   RESERVE_FEE_PERCENT, 
   PRIZE_POOL_PERCENT, 
   PRIZE_DISTRIBUTION 
 } from './constants';
-import { Score, RankingEntry, User, Guess, Draw, Pool } from './types';
+import { Score, RankingEntry, User, Guess, Draw } from './types';
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+export const generateAIGuess = async (): Promise<number[]> => {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: "Gere 12 números aleatórios e únicos entre 1 e 60 para um sorteio da Mega-Sena. Retorne apenas os números separados por vírgula, sem texto adicional.",
+    });
+    const text = response.text || "";
+    const numbers = text.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 60);
+    return numbers.slice(0, 12).sort((a, b) => a - b);
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    return Array.from({ length: 12 }, () => Math.floor(Math.random() * 60) + 1).sort((a, b) => a - b);
+  }
+};
 
 export const calculateFinances = (participantsCount: number, pricePerPerson: number) => {
   const totalCollected = participantsCount * pricePerPerson;
@@ -50,19 +68,16 @@ export const generateRanking = (
   };
 
   const ranking: RankingEntry[] = [];
-
   const addEntries = (tierIndex: number, totalTierPrize: number) => {
     const targetScore = distinctScores[tierIndex];
     if (targetScore === undefined) return;
-    
     const winners = sortedScores.filter(s => s.totalScore === targetScore);
     const prizePerPerson = winners.length > 0 ? totalTierPrize / winners.length : 0;
-    
     winners.forEach(w => {
       const user = users.find(u => u.id === w.userId);
       ranking.push({
         ...w,
-        userName: user?.name || `Usuário ${w.userId.split('-')[1] || w.userId}`,
+        userName: user?.name || `Usuário ${w.userId.substring(0, 5)}`,
         rank: tierIndex + 1,
         prizeValue: prizePerPerson
       });
@@ -73,19 +88,12 @@ export const generateRanking = (
   addEntries(1, finances.tier2);
   addEntries(2, finances.tier3);
 
-  // Add the rest
   sortedScores.forEach(s => {
     if (!ranking.find(r => r.userId === s.userId)) {
       const user = users.find(u => u.id === s.userId);
-      ranking.push({
-        ...s,
-        userName: user?.name || `Usuário ${s.userId.split('-')[1] || s.userId}`,
-        rank: 0,
-        prizeValue: 0
-      });
+      ranking.push({ ...s, userName: user?.name || `Usuário ${s.userId.substring(0, 5)}`, rank: 0, prizeValue: 0 });
     }
   });
-
   return ranking;
 };
 
@@ -93,8 +101,6 @@ export const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 };
 
-// Simulation of Mega-Sena API
 export const fetchMegaSenaResult = async (): Promise<number[]> => {
-  // In a real app, use: await fetch('https://loteriascaixa-api.herokuapp.com/api/megasena/latest')
   return Array.from({ length: 6 }, () => Math.floor(Math.random() * 60) + 1).sort((a, b) => a - b);
 };
