@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pool, PoolCapacity, PoolStatus, GameType, PoolBetType } from '../types';
+import { Pool, PoolStatus, GameType, PoolBetType } from '../types';
 import { GAME_CONFIG, APP_PLATFORM_FEE } from '../constants';
 import { formatCurrency } from '../utils';
 
@@ -19,7 +19,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
     betType: PoolBetType.INDIVIDUAL,
     requiredPicks: 6,
     officialTicketSize: 6,
-    capacity: PoolCapacity.A,
+    capacity: 10, // Valor padrão solicitado no exemplo
     price: 50,
   });
 
@@ -107,7 +107,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
               }`}
             >
               <span className="font-black text-[10px] uppercase block mb-1">Individual</span>
-              <p className="text-[8px] leading-tight">Cada um joga seu bilhete simples.</p>
+              <p className="text-[8px] leading-tight text-current opacity-70">Cada um joga seu bilhete simples.</p>
             </button>
             <button
               type="button"
@@ -117,7 +117,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
               }`}
             >
               <span className="font-black text-[10px] uppercase block mb-1">Mais Votados</span>
-              <p className="text-[8px] leading-tight">O sistema gera o bilhete oficial com os mais marcados.</p>
+              <p className="text-[8px] leading-tight text-current opacity-70">O sistema gera o bilhete oficial com os mais marcados.</p>
             </button>
           </div>
         </section>
@@ -129,7 +129,7 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
               required
               type="text" 
               className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-bold focus:border-emerald-500 outline-none transition-all" 
-              placeholder="Ex: Mega Master 14"
+              placeholder="Ex: Mega Master 10"
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
             />
@@ -163,18 +163,32 @@ const CreatePool: React.FC<CreatePoolProps> = ({ onCreated, adminId }) => {
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Valor do Jogo (Base)</label>
-            <div className="relative">
-              <input 
-                required
-                type="number" 
-                className="w-full p-4 pl-10 bg-gray-50 border-2 border-transparent rounded-2xl font-black text-center focus:border-emerald-500 outline-none transition-all" 
-                value={formData.price}
-                onChange={e => setFormData({...formData, price: Number(e.target.value)})}
-              />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-gray-300 text-xs">R$</span>
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Qtd. Apostadores</label>
+                <input 
+                  required
+                  type="number" 
+                  min={1}
+                  className="w-full p-4 bg-gray-50 border-2 border-transparent rounded-2xl font-black text-center focus:border-emerald-500 outline-none transition-all" 
+                  value={formData.capacity}
+                  onChange={e => setFormData({...formData, capacity: Number(e.target.value)})}
+                />
+                <p className="text-[8px] text-center mt-2 font-bold text-gray-300 italic">Fecha com {formData.capacity} cotas</p>
+             </div>
+             <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Valor do Jogo (Base)</label>
+                <div className="relative">
+                  <input 
+                    required
+                    type="number" 
+                    className="w-full p-4 pl-10 bg-gray-50 border-2 border-transparent rounded-2xl font-black text-center focus:border-emerald-500 outline-none transition-all" 
+                    value={formData.price}
+                    onChange={e => setFormData({...formData, price: Number(e.target.value)})}
+                  />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-gray-300 text-xs">R$</span>
+                </div>
+             </div>
           </div>
         </section>
 

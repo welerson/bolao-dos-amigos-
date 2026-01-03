@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, updateDoc, collection, addDoc, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, query, where, onSnapshot, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Pool, Guess, Draw, PoolStatus, AccessCode, User, GameType, PoolBetType } from '../types';
 import { formatCurrency, calculateFinances, calculateScores, generateRanking, fetchMegaSenaResult } from '../utils';
@@ -107,6 +107,25 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
       userId,
       numbers: localNumbers
     });
+  };
+
+  const handleDeletePool = async () => {
+    if (!window.confirm("ATENÇÃO: Você tem certeza que deseja excluir este bolão permanentemente? Esta ação não pode ser desfeita e removerá todos os dados deste grupo.")) return;
+    
+    try {
+      await deleteDoc(doc(db, 'pools', pool.id));
+      if (notify) notify("Bolão excluído com sucesso!");
+      navigate('/home');
+    } catch (e) {
+      console.error(e);
+      if (notify) notify("Erro ao excluir bolão.");
+    }
+  };
+
+  const handleGenerateCode = async () => {
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    await addDoc(collection(db, 'pool_codes'), { code, poolId: pool.id, used: false, createdAt: new Date().toISOString() });
+    if (notify) notify("Código gerado!");
   };
 
   return (
@@ -225,7 +244,6 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
            </div>
         )}
 
-        {/* Outras Abas mantendo lógica anterior */}
         {activeTab === 'results' && (
            <div className="space-y-6">
               {pool.draws.map((draw, idx) => (
@@ -250,6 +268,63 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                 </div>
               ))}
            </div>
+        )}
+
+        {activeTab === 'participants' && (
+           <div className="space-y-6">
+              <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Financeiro do Grupo</p>
+                  <div className="flex justify-between items-end">
+                     <div>
+                        <p className="text-xs font-bold text-gray-400">Arrecadação Bruta</p>
+                        <p className="text-xl font-black text-gray-800">{formatCurrency(finances.totalCollected)}</p>
+                     </div>
+                     <div className="text-right">
+                        <p className="text-[10px] font-black text-emerald-600 uppercase">Líquido Premiação</p>
+                        <p className="text-sm font-black text-emerald-600">{formatCurrency(finances.weeklyPrizePool)}</p>
+                     </div>
+                  </div>
+              </div>
+
+              {isUserAdmin && (
+                <div className="p-4 bg-red-50 rounded-[32px] border border-red-100 mt-10">
+                   <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-3 ml-2">Zona de Perigo</p>
+                   <button 
+                     onClick={handleDeletePool}
+                     className="w-full bg-white text-red-600 font-black py-4 rounded-2xl shadow-sm border border-red-200 hover:bg-red-600 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                   >
+                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                     Excluir este Bolão
+                   </button>
+                </div>
+              )}
+           </div>
+        )}
+
+        {activeTab === 'codes' && isAdmin && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <button onClick={handleGenerateCode} className="w-full bg-gray-900 text-white font-black py-5 rounded-[24px] shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+              <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
+              Gerar Novo Convite
+            </button>
+            <div className="space-y-3">
+              {poolCodes.map(c => (
+                <div key={c.id} className="bg-white p-5 rounded-[28px] border border-gray-100 flex justify-between items-center group">
+                  <div>
+                    <p className="text-xl font-black tracking-widest text-gray-800 uppercase">{c.code}</p>
+                    <p className={`text-[9px] font-black uppercase tracking-widest ${c.used ? 'text-amber-500' : 'text-emerald-500'}`}>
+                      {c.used ? `Usado por ${usersMap[c.usedBy!] || 'Usuário'}` : 'Disponível'}
+                    </p>
+                  </div>
+                  {!c.used && (
+                    <button onClick={() => { navigator.clipboard.writeText(c.code); notify?.("Código copiado!"); }} className="p-3 bg-gray-50 rounded-xl group-hover:bg-emerald-50 transition-colors">
+                      <svg className="w-5 h-5 text-gray-400 group-hover:text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

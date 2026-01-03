@@ -9,13 +9,6 @@ export enum PoolBetType {
   COLLABORATIVE = 'COLLABORATIVE' // Números mais marcados pelos participantes
 }
 
-export enum PoolCapacity {
-  A = 100,
-  B = 300,
-  C = 500,
-  D = 1000
-}
-
 export enum PoolStatus {
   AWAITING = 'Aguardando participantes',
   FULL = 'Lotado',
@@ -53,7 +46,7 @@ export interface Pool {
   betType: PoolBetType;
   requiredPicks: number; // Quantos números o usuário marca
   officialTicketSize: number; // Tamanho do bilhete oficial (ex: 14 números)
-  capacity: PoolCapacity;
+  capacity: number; // Mudado de PoolCapacity para number
   price: number;
   status: PoolStatus;
   participantsIds: string[];
