@@ -28,12 +28,25 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   
   const pool = pools.find(p => p.id === id);
-  const myGuess = guesses.find(g => g.poolId === id && g.userId === userId);
-  const [selectedNumbers, setSelectedNumbers] = useState<number[]>(myGuess?.numbers || []);
+  
+  // Múltiplas cotas: Filtra todos os palpites deste usuário neste bolão
+  const myGuesses = useMemo(() => guesses.filter(g => g.poolId === id && g.userId === userId), [guesses, id, userId]);
+  
+  // Cota ativa para visualização/edição
+  const [selectedGuessIndex, setSelectedGuessIndex] = useState(0);
+  const currentMyGuess = myGuesses[selectedGuessIndex];
+  
+  // Estado local para os números em edição (apenas se for um jogo novo/não salvo)
+  const [localNumbers, setLocalNumbers] = useState<number[]>([]);
 
+  // Quando mudar de cota ou carregar, atualiza os números locais
   useEffect(() => {
-    if (myGuess) setSelectedNumbers(myGuess.numbers);
-  }, [myGuess]);
+    if (currentMyGuess) {
+      setLocalNumbers(currentMyGuess.numbers);
+    } else {
+      setLocalNumbers([]);
+    }
+  }, [currentMyGuess]);
 
   // Carregar nomes de usuários para o Admin
   useEffect(() => {
@@ -86,32 +99,25 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const ranking = generateRanking(allScores, [], finances.weeklyPrizePool);
   const isUserAdmin = isAdmin || pool.adminId === userId;
 
-  const handleGenerateCode = async () => {
-    try {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      await addDoc(collection(db, 'pool_codes'), {
-        code,
-        poolId: pool.id,
-        used: false,
-        createdAt: new Date().toISOString()
-      });
-      if (notify) notify("Novo código gerado com sucesso!");
-    } catch (e) {
-      if (notify) notify("Erro ao gerar código.");
-    }
-  };
+  // Um jogo está bloqueado se já tem 18 números salvos no Firestore
+  const isCurrentGuessLocked = currentMyGuess && currentMyGuess.numbers.length === 18;
 
   const handleSaveGuess = () => {
-    if (pool.status === PoolStatus.FINISHED) return;
-    if (selectedNumbers.length !== 18) {
+    if (pool.status === PoolStatus.FINISHED || isCurrentGuessLocked) return;
+    if (localNumbers.length !== 18) {
       alert('Selecione exatamente 18 números!');
       return;
     }
+
+    if (!confirm("Uma vez confirmado, você NÃO poderá alterar seus números até o final do bolão. Deseja continuar?")) {
+        return;
+    }
+
     onSaveGuess({
-      id: `${pool.id}_${userId}`,
+      id: currentMyGuess?.id || `${pool.id}_${userId}_${Date.now()}`,
       poolId: pool.id,
       userId,
-      numbers: selectedNumbers
+      numbers: localNumbers
     });
   };
 
@@ -140,6 +146,24 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
     }
   };
 
+  // Fixed: Added handleGenerateCode to allow admin to generate access codes
+  const handleGenerateCode = async () => {
+    if (!pool || !isAdmin) return;
+    const newCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+    try {
+      await addDoc(collection(db, 'pool_codes'), {
+        code: newCode,
+        poolId: pool.id,
+        used: false,
+        createdAt: new Date().toISOString()
+      });
+      if (notify) notify("Código individual gerado!");
+    } catch (e) {
+      console.error(e);
+      if (notify) notify("Erro ao gerar código.");
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50 h-screen overflow-hidden">
       <header className="p-4 bg-white flex items-center justify-between border-b border-gray-100 shadow-sm z-20">
@@ -163,7 +187,7 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
 
       <div className="flex bg-white overflow-x-auto no-scrollbar border-b border-gray-100 shadow-sm z-10">
         {[
-          {id: 'guess', l: 'Meu Palpite'},
+          {id: 'guess', l: 'Meus Jogos'},
           {id: 'results', l: 'Sorteios'},
           {id: 'ranking', l: 'Ranking'},
           {id: 'participants', l: 'Participantes'},
@@ -179,14 +203,42 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
       <div className="flex-1 overflow-y-auto p-5 pb-28 no-scrollbar space-y-6">
         {activeTab === 'guess' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="bg-emerald-900 text-white p-8 rounded-[48px] shadow-2xl relative overflow-hidden">
+            {/* Seletor de Cotas se houver mais de uma */}
+            {myGuesses.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    {myGuesses.map((_, i) => (
+                        <button 
+                            key={i} 
+                            onClick={() => setSelectedGuessIndex(i)}
+                            className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedGuessIndex === i ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-100'}`}
+                        >
+                            Cota {i + 1}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <div className={`p-8 rounded-[48px] shadow-2xl relative overflow-hidden transition-colors duration-500 ${isCurrentGuessLocked ? 'bg-[#0f2e2e]' : 'bg-emerald-900'} text-white`}>
                <div className="relative z-10">
                  <div className="flex justify-between items-start">
-                    <h3 className="text-2xl font-black leading-tight mb-2">Suas<br/>18 Dezenas</h3>
+                    <div>
+                        <h3 className="text-2xl font-black leading-tight mb-1">Suas<br/>18 Dezenas</h3>
+                        {isCurrentGuessLocked && (
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                                <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Jogo Confirmado e Bloqueado</span>
+                            </div>
+                        )}
+                    </div>
+                    {isCurrentGuessLocked && (
+                        <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md">
+                            <svg className="w-5 h-5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                        </div>
+                    )}
                  </div>
                  <div className="grid grid-cols-6 gap-2 mt-6">
                    {Array.from({length: 18}).map((_, i) => {
-                     const n = selectedNumbers.sort((a,b)=>a-b)[i];
+                     const n = localNumbers.sort((a,b)=>a-b)[i];
                      return (
                        <div key={i} className={`aspect-square rounded-xl flex items-center justify-center font-black text-xs shadow-inner transition-all ${n ? 'bg-emerald-500 text-white border-emerald-400 border' : 'bg-white/5 border border-white/10 text-white/20'}`}>
                          {n ? n.toString().padStart(2, '0') : '--'}
@@ -198,17 +250,31 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
             </div>
 
             <div className="bg-white p-6 rounded-[40px] shadow-sm border border-gray-100">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center mb-6">Escolha exatamente 18 números</p>
-              <NumberGrid selected={selectedNumbers} onChange={setSelectedNumbers} disabled={pool.status === PoolStatus.FINISHED} />
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center mb-6">
+                {isCurrentGuessLocked ? 'Visualização de Jogo' : 'Escolha exatamente 18 números'}
+              </p>
+              <NumberGrid 
+                selected={localNumbers} 
+                onChange={setLocalNumbers} 
+                disabled={isCurrentGuessLocked || pool.status === PoolStatus.FINISHED} 
+              />
             </div>
 
-            {pool.status !== PoolStatus.FINISHED && (
+            {!isCurrentGuessLocked && pool.status !== PoolStatus.FINISHED && (
               <button 
                 onClick={handleSaveGuess}
                 className="w-full bg-emerald-600 text-white font-black py-6 rounded-[28px] shadow-xl hover:bg-emerald-700 active:scale-95 transition-all flex items-center justify-center gap-3"
               >
-                Confirmar Escolha
+                Confirmar Escolha Permanentemente
               </button>
+            )}
+
+            {isCurrentGuessLocked && (
+                <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl text-center">
+                    <p className="text-[11px] font-bold text-emerald-700 leading-relaxed">
+                        Este jogo está registrado. Caso queira um novo palpite, você precisa adquirir uma nova cota com um novo código.
+                    </p>
+                </div>
             )}
           </div>
         )}
@@ -367,7 +433,7 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs">
                       {idx + 1}
                     </div>
-                    <p className="text-sm font-black text-gray-800">Participante #{pid.substring(0,6).toUpperCase()}</p>
+                    <p className="text-sm font-black text-gray-800">Cota #{idx + 1} ({pid.substring(0,6).toUpperCase()})</p>
                   </div>
                 ))
               )}

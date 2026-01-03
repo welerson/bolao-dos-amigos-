@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { collection, onSnapshot, query, doc, setDoc, getDoc, updateDoc, arrayUnion, where, getDocs, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, setDoc, getDoc, updateDoc, arrayUnion, where, getDocs, limit, addDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { User, Pool, PoolStatus, Guess } from './types';
 import Login from './views/Login';
@@ -98,18 +98,22 @@ const App: React.FC = () => {
       const codeDoc = querySnapshot.docs[0];
       const poolRef = doc(db, 'pools', poolId);
 
+      // Marca código como usado
       await updateDoc(doc(db, 'pool_codes', codeDoc.id), {
         used: true,
         usedBy: currentUser.id
       });
 
-      const isFull = pool.participantsIds.length + 1 >= pool.capacity;
+      // Adiciona participante (permite duplicata para representar múltiplas cotas)
+      const newParticipants = [...pool.participantsIds, currentUser.id];
+      const isFull = newParticipants.length >= pool.capacity;
+      
       await updateDoc(poolRef, {
-        participantsIds: arrayUnion(currentUser.id),
+        participantsIds: newParticipants,
         status: isFull ? PoolStatus.FULL : pool.status
       });
 
-      addNotification("Bem-vindo ao grupo! Código validado.");
+      addNotification("Nova cota adquirida com sucesso!");
     } catch (e) {
       console.error(e);
       addNotification("Erro ao validar código.");
@@ -119,13 +123,22 @@ const App: React.FC = () => {
   const saveGuess = async (guess: Guess) => {
     if (!currentUser) return;
     try {
-      const guessId = `${guess.poolId}_${guess.userId}`;
-      const guessData = {
+      // Se o palpite já tem ID, significa que estamos tentando sobrescrever um salvo
+      // A UI deve bloquear isso, mas garantimos aqui também.
+      const existing = guesses.find(g => g.id === guess.id && g.numbers.length > 0);
+      if (existing) {
+        addNotification("Este palpite já foi bloqueado.");
+        return;
+      }
+
+      // Salva com ID único para permitir múltiplas cotas
+      const guessId = guess.id || `${guess.poolId}_${currentUser.id}_${Date.now()}`;
+      await setDoc(doc(db, 'guesses', guessId), {
         ...guess,
-        userName: currentUser.name // Garante que o nome esteja no palpite
-      };
-      await setDoc(doc(db, 'guesses', guessId), guessData);
-      addNotification("Seu palpite de 18 números foi salvo!");
+        id: guessId,
+        userName: currentUser.name
+      });
+      addNotification("Palpite salvo e bloqueado para alterações!");
     } catch (e) {
       addNotification("Erro ao salvar palpite.");
     }

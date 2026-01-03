@@ -72,7 +72,7 @@ const PoolList: React.FC<PoolListProps> = ({ pools, onJoin, userId }) => {
 
               <div className="mb-6">
                 <div className="flex justify-between text-xs font-bold mb-1.5">
-                  <span className="text-gray-500">Ocupação</span>
+                  <span className="text-gray-500">Ocupação (Cotas)</span>
                   <span className="text-gray-800">{pool.participantsIds.length} / {pool.capacity}</span>
                 </div>
                 <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
@@ -83,24 +83,26 @@ const PoolList: React.FC<PoolListProps> = ({ pools, onJoin, userId }) => {
                 </div>
               </div>
 
-              {isMember ? (
-                <button 
-                  onClick={() => navigate(`/pool/${pool.id}`)}
-                  className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all"
-                >
-                  Acessar Grupo
-                </button>
-              ) : (
-                <button 
-                  disabled={isFull || pool.status === PoolStatus.FINISHED}
-                  onClick={() => handleJoinClick(pool.id)}
-                  className={`w-full font-black py-4 rounded-2xl shadow-sm transition-all ${
-                    isFull ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                  }`}
-                >
-                  {isFull ? 'Lotado' : pool.status === PoolStatus.FINISHED ? 'Encerrado' : 'Entrar com Código'}
-                </button>
-              )}
+              <div className="flex gap-2">
+                  {isMember && (
+                    <button 
+                        onClick={() => navigate(`/pool/${pool.id}`)}
+                        className="flex-1 bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all"
+                    >
+                        Acessar Grupo
+                    </button>
+                  )}
+                  <button 
+                    disabled={isFull || pool.status === PoolStatus.FINISHED}
+                    onClick={() => handleJoinClick(pool.id)}
+                    className={`flex-1 font-black py-4 rounded-2xl shadow-sm transition-all ${
+                        isFull ? 'bg-gray-100 text-gray-400 cursor-not-allowed hidden' : 
+                        isMember ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] uppercase tracking-wider' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {isMember ? '+ Comprar Cota' : 'Entrar com Código'}
+                  </button>
+              </div>
             </div>
           );
         })}
@@ -109,8 +111,8 @@ const PoolList: React.FC<PoolListProps> = ({ pools, onJoin, userId }) => {
       {joiningPoolId && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-emerald-950/80 backdrop-blur-sm">
           <div className="bg-white w-full rounded-[40px] p-8 shadow-2xl animate-in zoom-in duration-200">
-            <h3 className="text-2xl font-black text-gray-800 mb-2">Confirmar Pagamento</h3>
-            <p className="text-gray-400 text-sm mb-6">Insira o código individual que você recebeu para entrar neste grupo.</p>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">Validar Nova Cota</h3>
+            <p className="text-gray-400 text-sm mb-6">Insira o código individual que você recebeu para registrar este novo jogo no grupo.</p>
             
             <input 
               autoFocus
@@ -132,7 +134,7 @@ const PoolList: React.FC<PoolListProps> = ({ pools, onJoin, userId }) => {
                 onClick={confirmJoin}
                 className="flex-[2] bg-emerald-600 text-white font-black py-4 rounded-[24px] shadow-xl hover:bg-emerald-700 active:scale-95 transition-all"
               >
-                Validar Código
+                Validar Cota
               </button>
             </div>
           </div>
