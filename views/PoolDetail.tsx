@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, updateDoc, collection, addDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Pool, Guess, Draw, PoolStatus, AccessCode } from '../types';
+import { Pool, Guess, Draw, PoolStatus, AccessCode, User } from '../types';
 import { formatCurrency, calculateFinances, calculateScores, generateRanking, fetchMegaSenaResult } from '../utils';
 import { NumberGrid } from '../components/NumberGrid';
 import { ReportModal } from '../components/ReportModal';
@@ -25,6 +25,7 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const [showReport, setShowReport] = useState(false);
   const [poolCodes, setPoolCodes] = useState<AccessCode[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
   
   const pool = pools.find(p => p.id === id);
   const myGuess = guesses.find(g => g.poolId === id && g.userId === userId);
@@ -33,6 +34,23 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   useEffect(() => {
     if (myGuess) setSelectedNumbers(myGuess.numbers);
   }, [myGuess]);
+
+  // Carregar nomes de usuários para o Admin
+  useEffect(() => {
+    if (pool && isAdmin) {
+      const fetchUsers = async () => {
+        const uRef = collection(db, 'users');
+        const snap = await getDocs(uRef);
+        const mapping: Record<string, string> = {};
+        snap.forEach(doc => {
+          const data = doc.data() as User;
+          mapping[doc.id] = data.name;
+        });
+        setUsersMap(mapping);
+      };
+      fetchUsers();
+    }
+  }, [pool, isAdmin]);
 
   // Monitorar códigos para admin
   useEffect(() => {
@@ -51,13 +69,18 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const poolGuesses = useMemo(() => guesses.filter(g => g.poolId === id), [guesses, id]);
   
   const filteredGuesses = useMemo(() => {
-    if (!searchTerm.trim()) return poolGuesses;
+    const list = poolGuesses.map(g => ({
+      ...g,
+      displayName: usersMap[g.userId] || g.userName || `Usuário ${g.userId.substring(0, 6)}`
+    }));
+
+    if (!searchTerm.trim()) return list;
     const term = searchTerm.toLowerCase();
-    return poolGuesses.filter(g => 
-      g.userName?.toLowerCase().includes(term) || 
+    return list.filter(g => 
+      g.displayName.toLowerCase().includes(term) || 
       g.userId.toLowerCase().includes(term)
     );
-  }, [poolGuesses, searchTerm]);
+  }, [poolGuesses, searchTerm, usersMap]);
 
   const allScores = calculateScores(poolGuesses, pool.draws);
   const ranking = generateRanking(allScores, [], finances.weeklyPrizePool);
@@ -280,53 +303,53 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
         )}
 
         {activeTab === 'participants' && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {isUserAdmin && (
-              <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm">
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Gerenciamento do Grupo</p>
-                 <div className="flex justify-between items-end mb-6">
-                    <div>
-                      <p className="text-xs font-bold text-gray-400">Prêmio Acumulado</p>
-                      <p className="text-2xl font-black text-emerald-600">{formatCurrency(finances.weeklyPrizePool)}</p>
-                    </div>
-                    <div className="text-right">
+              <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm">
+                 <div className="mb-6">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">GERENCIAMENTO DO GRUPO</p>
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-xs font-bold text-gray-400">Prêmio Acumulado</p>
+                        <p className="text-2xl font-black text-emerald-600 leading-tight">{formatCurrency(finances.weeklyPrizePool)}</p>
+                      </div>
                       <p className="text-[10px] font-black text-gray-300 uppercase">{pool.participantsIds.length} MEMBROS</p>
                     </div>
                  </div>
                  
-                 <div className="relative">
+                 <div className="relative group">
                     <input 
                       type="text"
                       placeholder="Buscar participante por nome..."
-                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                      className="w-full p-4 pl-12 bg-gray-50 border-2 border-transparent rounded-2xl text-sm font-semibold outline-none focus:border-emerald-500 focus:bg-white transition-all shadow-inner"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                     </div>
                  </div>
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {isUserAdmin ? (
                 filteredGuesses.length > 0 ? (
                   filteredGuesses.map((g, idx) => (
-                    <div key={g.id} className="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 space-y-4 animate-in fade-in duration-300">
+                    <div key={g.id} className="bg-white p-6 rounded-[40px] shadow-sm border border-gray-100 space-y-6 animate-in fade-in duration-300">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs shadow-inner">
                           {idx + 1}
                         </div>
                         <div>
-                          <h4 className="font-black text-gray-800 text-sm">{g.userName || `Usuário ${g.userId.substring(0, 6)}`}</h4>
-                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Palpite de 18 Números</p>
+                          <h4 className="font-black text-[#1a3a3a] text-lg leading-tight">{(g as any).displayName}</h4>
+                          <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">PALPITE DE 18 NÚMEROS</p>
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-6 gap-1.5 p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                      <div className="grid grid-cols-6 gap-2 p-4 bg-gray-50/50 rounded-3xl border border-gray-100/50">
                         {g.numbers.sort((a, b) => a - b).map((n, i) => (
-                          <div key={i} className="aspect-square rounded-lg bg-white border border-gray-200 flex items-center justify-center text-[10px] font-black text-emerald-700 shadow-sm">
+                          <div key={i} className="aspect-square rounded-xl bg-white border border-gray-100 flex items-center justify-center text-[11px] font-black text-emerald-700 shadow-sm transition-transform hover:scale-105">
                             {n.toString().padStart(2, '0')}
                           </div>
                         ))}
@@ -334,15 +357,17 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-10 opacity-30 italic font-black">Nenhum palpite encontrado</div>
+                  <div className="text-center py-20 bg-white rounded-[40px] border border-dashed border-gray-200">
+                    <p className="opacity-30 italic font-black text-gray-400 uppercase tracking-widest text-xs">Nenhum palpite encontrado</p>
+                  </div>
                 )
               ) : (
                 pool.participantsIds.map((pid, idx) => (
-                  <div key={idx} className="flex items-center gap-4 p-4 bg-white rounded-3xl shadow-sm border border-gray-100">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xs">
+                  <div key={idx} className="flex items-center gap-4 p-5 bg-white rounded-[32px] shadow-sm border border-gray-100">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs">
                       {idx + 1}
                     </div>
-                    <p className="text-sm font-black text-gray-800">Participante #{pid.substring(0,4).toUpperCase()}</p>
+                    <p className="text-sm font-black text-gray-800">Participante #{pid.substring(0,6).toUpperCase()}</p>
                   </div>
                 ))
               )}
