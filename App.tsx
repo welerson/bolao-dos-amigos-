@@ -166,7 +166,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={currentUser ? <Navigate to="/home" /> : <Login onLogin={setCurrentUser} />} />
           <Route path="/home" element={currentUser ? <Home user={currentUser} activePools={pools.filter(p => p.participantsIds.includes(currentUser?.id || ''))} /> : <Navigate to="/" />} />
-          <Route path="/pools" element={currentUser ? <PoolList pools={pools} onJoin={joinPoolWithCode} userId={currentUser?.id} /> : <Navigate to="/" />} />
+          <Route path="/pools" element={currentUser ? <PoolList pools={pools} onJoin={joinPoolWithCode} userId={currentUser?.id} isAdmin={currentUser?.isAdmin} onNotify={addNotification} /> : <Navigate to="/" />} />
           <Route path="/create" element={currentUser?.isAdmin ? <CreatePool onCreated={addPool} adminId={currentUser?.id || ''} /> : <Navigate to="/home" />} />
           <Route path="/pool/:id" element={currentUser ? <PoolDetail pools={pools} setPools={setPools} guesses={guesses} onSaveGuess={saveGuess} userId={currentUser?.id || ''} notify={addNotification} isAdmin={currentUser.isAdmin} /> : <Navigate to="/" />} />
           <Route path="/how-it-works" element={currentUser ? <HowItWorks /> : <Navigate to="/" />} />
