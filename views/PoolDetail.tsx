@@ -31,6 +31,9 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const pool = pools.find(p => p.id === id);
   const gameConfig = pool ? GAME_CONFIG[pool.gameType || GameType.MEGA_SENA] : GAME_CONFIG[GameType.MEGA_SENA];
   
+  // Define a quantidade de números necessária vinda do banco ou do config (fallback)
+  const picksRequired = pool?.requiredPicks || gameConfig.requiredPicks;
+  
   const myGuesses = useMemo(() => guesses.filter(g => g.poolId === id && g.userId === userId), [guesses, id, userId]);
   const [selectedGuessIndex, setSelectedGuessIndex] = useState(0);
   const currentMyGuess = myGuesses[selectedGuessIndex];
@@ -68,25 +71,15 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const finances = calculateFinances(pool.participantsIds.length, pool.price);
   const poolGuesses = useMemo(() => guesses.filter(g => g.poolId === id), [guesses, id]);
   
-  const filteredGuesses = useMemo(() => {
-    const list = poolGuesses.map(g => ({
-      ...g,
-      displayName: usersMap[g.userId] || g.userName || `Usuário ${g.userId.substring(0, 6)}`
-    }));
-    if (!searchTerm.trim()) return list;
-    const term = searchTerm.toLowerCase();
-    return list.filter(g => g.displayName.toLowerCase().includes(term));
-  }, [poolGuesses, searchTerm, usersMap]);
-
   const allScores = calculateScores(poolGuesses, pool.draws);
   const ranking = generateRanking(allScores, [], finances.weeklyPrizePool);
   const isUserAdmin = isAdmin || pool.adminId === userId;
-  const isCurrentGuessLocked = currentMyGuess && currentMyGuess.numbers.length === gameConfig.requiredPicks;
+  const isCurrentGuessLocked = currentMyGuess && currentMyGuess.numbers.length === picksRequired;
 
   const handleSaveGuess = () => {
     if (pool.status === PoolStatus.FINISHED || isCurrentGuessLocked) return;
-    if (localNumbers.length !== gameConfig.requiredPicks) {
-      alert(`Selecione exatamente ${gameConfig.requiredPicks} números!`);
+    if (localNumbers.length !== picksRequired) {
+      alert(`Selecione exatamente ${picksRequired} números!`);
       return;
     }
     if (!confirm("Confirmar palpite? Não poderá ser alterado.")) return;
@@ -122,8 +115,8 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
       </header>
 
       <div className="flex bg-white overflow-x-auto no-scrollbar border-b border-gray-100 shadow-sm z-10">
-        {['Meus Jogos', 'Sorteios', 'Ranking', 'Participantes', ...(isAdmin ? ['Códigos'] : [])].map((label, idx) => {
-          const tabId = label.toLowerCase().replace(' ', '') === 'meusjogos' ? 'guess' : label.toLowerCase();
+        {['Meu Jogo', 'Sorteios', 'Ranking', 'Participantes', ...(isAdmin ? ['Códigos'] : [])].map((label, idx) => {
+          const tabId = label.toLowerCase().replace(' ', '') === 'meujogo' ? 'guess' : label.toLowerCase();
           return (
             <button key={idx} onClick={() => setActiveTab(tabId as any)} className={`px-5 py-4 text-[11px] font-black uppercase tracking-tight whitespace-nowrap border-b-[3px] transition-all ${activeTab === tabId ? `border-${gameConfig.color}-600 ${gameConfig.theme.text}` : 'border-transparent text-gray-400'}`}>
               {label}
@@ -139,7 +132,7 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
                     {myGuesses.map((_, i) => (
                         <button key={i} onClick={() => setSelectedGuessIndex(i)} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase transition-all ${selectedGuessIndex === i ? `${gameConfig.theme.bg} text-white shadow-lg` : 'bg-white text-gray-400 border border-gray-100'}`}>
-                            Jogo {i + 1}
+                            Cota {i + 1}
                         </button>
                     ))}
                 </div>
@@ -147,9 +140,9 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
 
             <div className={`p-8 rounded-[48px] shadow-2xl relative overflow-hidden text-white ${isCurrentGuessLocked ? gameConfig.theme.dark : gameConfig.theme.bg}`}>
                <div className="relative z-10">
-                 <h3 className="text-2xl font-black leading-tight mb-4">Suas<br/>{gameConfig.requiredPicks} Dezenas</h3>
+                 <h3 className="text-2xl font-black leading-tight mb-4">Suas<br/>{picksRequired} Dezenas</h3>
                  <div className="grid grid-cols-5 gap-2">
-                   {Array.from({length: gameConfig.requiredPicks}).map((_, i) => {
+                   {Array.from({length: picksRequired}).map((_, i) => {
                      const n = localNumbers.sort((a,b)=>a-b)[i];
                      return (
                        <div key={i} className={`aspect-square rounded-xl flex items-center justify-center font-black text-[10px] shadow-inner ${n ? 'bg-white/20 border border-white/30' : 'bg-black/10 text-white/20'}`}>
@@ -167,53 +160,36 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                 onChange={setLocalNumbers} 
                 disabled={isCurrentGuessLocked || pool.status === PoolStatus.FINISHED} 
                 maxRange={gameConfig.maxNumbers}
-                limit={gameConfig.requiredPicks}
+                limit={picksRequired}
               />
             </div>
 
             {!isCurrentGuessLocked && (
               <button onClick={handleSaveGuess} className={`w-full ${gameConfig.theme.bg} text-white font-black py-6 rounded-[28px] shadow-xl hover:opacity-90 active:scale-95 transition-all`}>
-                Confirmar Jogo Permanentemente
+                Salvar Palpite Permanentemente
               </button>
             )}
           </div>
         )}
 
-        {/* Outras Abas omitidas por brevidade, mas funcionais */}
+        {/* Participantes e Financeiro */}
         {activeTab === 'participants' && (
            <div className="space-y-4">
               {isAdmin && (
                 <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm mb-6">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">RELATÓRIO DE GESTÃO</p>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Relatório de Gestão</p>
                   <div className="flex justify-between items-end mb-4">
                      <div>
-                        <p className="text-xs font-bold text-gray-400">Total Arrecadado</p>
+                        <p className="text-xs font-bold text-gray-400">Arrecadação Total</p>
                         <p className="text-xl font-black text-gray-800">{formatCurrency(finances.totalCollected)}</p>
                      </div>
                      <div className="text-right">
-                        <p className="text-[10px] font-black text-emerald-600 uppercase">Taxa Plataforma</p>
-                        <p className="text-sm font-black">{formatCurrency(finances.appFee)}</p>
+                        <p className="text-[10px] font-black text-emerald-600 uppercase">Taxa App</p>
+                        <p className="text-sm font-black text-emerald-600">-{formatCurrency(finances.appFee)}</p>
                      </div>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-2xl flex justify-between items-center">
-                     <p className="text-[10px] font-black text-gray-400 uppercase">Líquido do Bolão</p>
-                     <p className="text-sm font-black text-emerald-600">{formatCurrency(finances.poolNetValue)}</p>
                   </div>
                 </div>
               )}
-              {filteredGuesses.map((g, idx) => (
-                <div key={g.id} className="bg-white p-5 rounded-[32px] border border-gray-100 shadow-sm">
-                   <div className="flex items-center gap-4 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center font-black text-xs text-gray-400">{idx+1}</div>
-                      <h4 className="font-black text-sm text-gray-800">{(g as any).displayName}</h4>
-                   </div>
-                   <div className="flex flex-wrap gap-1.5">
-                      {g.numbers.sort((a,b)=>a-b).map(n => (
-                        <span key={n} className="px-2 py-1 bg-gray-50 text-[10px] font-black text-gray-500 rounded-md border border-gray-100">{n.toString().padStart(2, '0')}</span>
-                      ))}
-                   </div>
-                </div>
-              ))}
            </div>
         )}
       </div>

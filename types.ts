@@ -45,6 +45,7 @@ export interface Pool {
   name: string;
   description: string;
   gameType: GameType;
+  requiredPicks: number; // Campo adicionado para o admin definir
   capacity: PoolCapacity;
   price: number;
   status: PoolStatus;
