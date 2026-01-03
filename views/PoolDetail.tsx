@@ -15,9 +15,10 @@ interface PoolDetailProps {
   onSaveGuess: (guess: Guess) => void;
   userId: string;
   notify?: (msg: string) => void;
+  isAdmin?: boolean;
 }
 
-const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, userId, notify }) => {
+const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, userId, notify, isAdmin }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'participants' | 'guess' | 'results' | 'ranking' | 'finance'>('guess');
@@ -38,6 +39,8 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const poolGuesses = guesses.filter(g => g.poolId === id);
   const allScores = calculateScores(poolGuesses, pool.draws);
   const ranking = generateRanking(allScores, [], finances.weeklyPrizePool);
+
+  const isUserAdmin = isAdmin || pool.adminId === userId;
 
   const handleAIGuess = async () => {
     setIsGeneratingAI(true);
@@ -63,8 +66,10 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   };
 
   const handleUpdateDraw = async (drawIndex: number) => {
+    if (!isUserAdmin) return;
+    
     let numbers: number[] | undefined;
-    const choice = confirm('OK para buscar automático, ou CANCELAR para manual.');
+    const choice = confirm('OK para buscar automático (Simulado), ou CANCELAR para manual.');
     
     if (choice) {
       if (notify) notify("Buscando resultados oficiais...");
@@ -104,11 +109,11 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
     <div className="flex-1 flex flex-col bg-gray-50 h-screen overflow-hidden">
       <header className="p-4 bg-white flex items-center justify-between border-b border-gray-100 shadow-sm z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/home')} className="p-2 hover:bg-gray-100 rounded-2xl transition-all active:scale-90">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-2xl transition-all active:scale-90">
             <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
           </button>
           <div>
-            <h2 className="font-black text-gray-800 leading-none">{pool.name}</h2>
+            <h2 className="font-black text-gray-800 leading-none truncate max-w-[150px]">{pool.name}</h2>
             <span className={`text-[9px] font-black uppercase tracking-widest ${pool.status === PoolStatus.FINISHED ? 'text-blue-600' : 'text-emerald-500'}`}>
               {pool.status}
             </span>
@@ -199,7 +204,7 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                     ))
                   )}
                 </div>
-                {pool.adminId === userId && pool.status !== PoolStatus.FINISHED && draw.numbers.length === 0 && (
+                {isUserAdmin && pool.status !== PoolStatus.FINISHED && draw.numbers.length === 0 && (
                   <button onClick={() => handleUpdateDraw(idx)} className="w-full mt-8 bg-gray-50 text-gray-400 border border-gray-100 font-black py-4 rounded-2xl text-[10px] hover:bg-emerald-50 hover:text-emerald-600 transition-all uppercase tracking-widest">Registrar Resultado</button>
                 )}
               </div>
@@ -209,14 +214,14 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
 
         {activeTab === 'ranking' && (
           <div className="space-y-4">
-            {ranking.map((entry, idx) => (
+            {ranking.length > 0 ? ranking.map((entry, idx) => (
               <div key={idx} className={`p-5 rounded-[32px] flex items-center justify-between transition-all shadow-sm ${entry.rank === 1 ? 'bg-amber-50 border border-amber-200' : 'bg-white border border-gray-100'}`}>
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${entry.rank > 0 ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-400'}`}>
                     {entry.rank > 0 ? entry.rank + 'º' : '-'}
                   </div>
                   <div>
-                    <h4 className="font-black text-gray-800 text-sm">{entry.userName}</h4>
+                    <h4 className="font-black text-gray-800 text-sm truncate max-w-[120px]">{entry.userName}</h4>
                     <p className="text-[10px] text-gray-400 font-black uppercase mt-0.5">{entry.totalScore} Pontos</p>
                   </div>
                 </div>
@@ -224,7 +229,9 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                   {entry.prizeValue > 0 && <p className="text-sm font-black text-emerald-600">{formatCurrency(entry.prizeValue)}</p>}
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-10 opacity-30 italic font-bold">Nenhum palpite registrado.</div>
+            )}
           </div>
         )}
 
@@ -250,10 +257,14 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
           <div className="space-y-3">
             {pool.participantsIds.map((pid, idx) => (
               <div key={idx} className="flex items-center gap-4 p-4 bg-white rounded-3xl shadow-sm border border-gray-100">
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${pid}`} className="w-12 h-12 rounded-2xl bg-gray-50" alt="Avatar" />
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold">
+                  {pid.substring(0,2).toUpperCase()}
+                </div>
                 <div>
                   <p className="text-sm font-black text-gray-800">Participante #{idx + 1}</p>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Sincronizado</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                    {pid === userId ? 'Você' : 'Sincronizado'}
+                  </p>
                 </div>
               </div>
             ))}

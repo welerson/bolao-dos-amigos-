@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { collection, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, setDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { User, Pool, PoolStatus, Guess } from './types';
 import Login from './views/Login';
@@ -18,17 +18,26 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<{id: number, msg: string}[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // 1. Monitorar estado de autenticação
+  // 1. Monitorar estado de autenticação e buscar Perfil no Firestore
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        setCurrentUser({
-          id: user.uid,
-          name: user.displayName || 'Participante',
-          email: user.email || '',
-          phone: '',
-          isAdmin: false
-        });
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        // Busca dados adicionais (como isAdmin) no Firestore
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          setCurrentUser(userDoc.data() as User);
+        } else {
+          // Caso o documento não exista (falha na criação), cria um perfil básico
+          const basicUser: User = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || 'Participante',
+            email: firebaseUser.email || '',
+            phone: '',
+            isAdmin: false
+          };
+          await setDoc(doc(db, 'users', firebaseUser.uid), basicUser);
+          setCurrentUser(basicUser);
+        }
       } else {
         setCurrentUser(null);
         setPools([]);
@@ -39,40 +48,25 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Sincronizar Bolões - APENAS se houver usuário logado
+  // 2. Sincronizar Bolões
   useEffect(() => {
     if (!currentUser) return;
-
     const q = query(collection(db, 'pools'));
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const poolsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pool));
-        setPools(poolsData);
-      },
-      (error) => {
-        console.error("Erro no listener de pools:", error);
-        if (error.code === 'permission-denied') {
-          // Silencia o erro de permissão no console se o usuário for desconectado
-        }
-      }
-    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const poolsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Pool));
+      setPools(poolsData);
+    });
     return () => unsubscribe();
   }, [currentUser]);
 
-  // 3. Sincronizar Palpites - APENAS se houver usuário logado
+  // 3. Sincronizar Palpites
   useEffect(() => {
     if (!currentUser) return;
-
     const q = query(collection(db, 'guesses'));
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const guessesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Guess));
-        setGuesses(guessesData);
-      },
-      (error) => {
-        console.error("Erro no listener de guesses:", error);
-      }
-    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const guessesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Guess));
+      setGuesses(guessesData);
+    });
     return () => unsubscribe();
   }, [currentUser]);
 
@@ -121,21 +115,18 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-emerald-700 text-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="font-bold">Iniciando Bolão...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-emerald-700 text-white font-bold">
+        Carregando...
       </div>
     );
   }
 
   return (
     <Router>
-      <div className="min-h-screen max-w-md mx-auto bg-gray-50 flex flex-col shadow-2xl relative overflow-hidden border-x border-gray-200">
+      <div className="min-h-screen max-w-md mx-auto bg-gray-50 flex flex-col shadow-2xl relative overflow-hidden">
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[320px] pointer-events-none flex flex-col gap-2">
           {notifications.map(n => (
-            <div key={n.id} className="bg-emerald-900/90 backdrop-blur text-white px-4 py-3 rounded-2xl text-sm font-bold shadow-xl animate-bounce text-center">
+            <div key={n.id} className="bg-emerald-900/90 backdrop-blur text-white px-4 py-3 rounded-2xl text-sm font-bold shadow-xl text-center">
               {n.msg}
             </div>
           ))}
@@ -145,8 +136,8 @@ const App: React.FC = () => {
           <Route path="/" element={currentUser ? <Navigate to="/home" /> : <Login onLogin={setCurrentUser} />} />
           <Route path="/home" element={currentUser ? <Home user={currentUser} activePools={pools.filter(p => p.participantsIds.includes(currentUser?.id || ''))} /> : <Navigate to="/" />} />
           <Route path="/pools" element={currentUser ? <PoolList pools={pools} onJoin={joinPool} userId={currentUser?.id} /> : <Navigate to="/" />} />
-          <Route path="/create" element={currentUser ? <CreatePool onCreated={addPool} adminId={currentUser?.id || ''} /> : <Navigate to="/" />} />
-          <Route path="/pool/:id" element={currentUser ? <PoolDetail pools={pools} setPools={setPools} guesses={guesses} onSaveGuess={saveGuess} userId={currentUser?.id || ''} notify={addNotification} /> : <Navigate to="/" />} />
+          <Route path="/create" element={currentUser?.isAdmin ? <CreatePool onCreated={addPool} adminId={currentUser?.id || ''} /> : <Navigate to="/home" />} />
+          <Route path="/pool/:id" element={currentUser ? <PoolDetail pools={pools} setPools={setPools} guesses={guesses} onSaveGuess={saveGuess} userId={currentUser?.id || ''} notify={addNotification} isAdmin={currentUser.isAdmin} /> : <Navigate to="/" />} />
           <Route path="/how-it-works" element={currentUser ? <HowItWorks /> : <Navigate to="/" />} />
         </Routes>
       </div>

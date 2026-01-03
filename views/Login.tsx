@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth } from '../firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 import { User } from '../types';
 
 interface LoginProps {
@@ -23,23 +24,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     try {
       if (isLogin) {
         const res = await signInWithEmailAndPassword(auth, email, password);
-        onLogin({
-          id: res.user.uid,
-          name: res.user.displayName || 'Usuário',
-          email: res.user.email || '',
-          phone: '',
-          isAdmin: false
-        });
+        const userDoc = await getDoc(doc(db, 'users', res.user.uid));
+        if (userDoc.exists()) {
+          onLogin(userDoc.data() as User);
+        }
       } else {
         const res = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(res.user, { displayName: name });
-        onLogin({
+        
+        const newUser: User = {
           id: res.user.uid,
           name: name,
           email: email,
           phone: '',
-          isAdmin: false
-        });
+          isAdmin: false // Por padrão, novos usuários não são admins
+        };
+        
+        // Salva o perfil no Firestore
+        await setDoc(doc(db, 'users', res.user.uid), newUser);
+        onLogin(newUser);
       }
       navigate('/home');
     } catch (error: any) {
