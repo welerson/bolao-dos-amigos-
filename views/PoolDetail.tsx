@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, updateDoc, collection, addDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Pool, Guess, Draw, PoolStatus, AccessCode } from '../types';
-import { formatCurrency, calculateFinances, calculateScores, generateRanking, fetchMegaSenaResult, generateAIGuess } from '../utils';
+import { formatCurrency, calculateFinances, calculateScores, generateRanking, fetchMegaSenaResult } from '../utils';
 import { NumberGrid } from '../components/NumberGrid';
 import { ReportModal } from '../components/ReportModal';
 
@@ -23,8 +23,8 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'participants' | 'guess' | 'results' | 'ranking' | 'codes'>('guess');
   const [showReport, setShowReport] = useState(false);
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [poolCodes, setPoolCodes] = useState<AccessCode[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const pool = pools.find(p => p.id === id);
   const myGuess = guesses.find(g => g.poolId === id && g.userId === userId);
@@ -48,7 +48,17 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
   if (!pool) return <div className="p-8 text-center font-bold">Carregando bolão...</div>;
 
   const finances = calculateFinances(pool.participantsIds.length, pool.price);
-  const poolGuesses = guesses.filter(g => g.poolId === id);
+  const poolGuesses = useMemo(() => guesses.filter(g => g.poolId === id), [guesses, id]);
+  
+  const filteredGuesses = useMemo(() => {
+    if (!searchTerm.trim()) return poolGuesses;
+    const term = searchTerm.toLowerCase();
+    return poolGuesses.filter(g => 
+      g.userName?.toLowerCase().includes(term) || 
+      g.userId.toLowerCase().includes(term)
+    );
+  }, [poolGuesses, searchTerm]);
+
   const allScores = calculateScores(poolGuesses, pool.draws);
   const ranking = generateRanking(allScores, [], finances.weeklyPrizePool);
   const isUserAdmin = isAdmin || pool.adminId === userId;
@@ -66,14 +76,6 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
     } catch (e) {
       if (notify) notify("Erro ao gerar código.");
     }
-  };
-
-  const handleAIGuess = async () => {
-    setIsGeneratingAI(true);
-    if (notify) notify("Gemini escolhendo 18 dezenas...");
-    const aiNumbers = await generateAIGuess();
-    setSelectedNumbers(aiNumbers);
-    setIsGeneratingAI(false);
   };
 
   const handleSaveGuess = () => {
@@ -141,7 +143,7 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
           {id: 'guess', l: 'Meu Palpite'},
           {id: 'results', l: 'Sorteios'},
           {id: 'ranking', l: 'Ranking'},
-          {id: 'participants', l: 'Grupo'},
+          {id: 'participants', l: 'Participantes'},
           ...(isAdmin ? [{id: 'codes', l: 'Códigos'}] : [])
         ].map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-5 py-4 text-[11px] font-black uppercase tracking-tight whitespace-nowrap border-b-[3px] transition-all ${activeTab === tab.id ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-400'}`}>
@@ -158,14 +160,6 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
                <div className="relative z-10">
                  <div className="flex justify-between items-start">
                     <h3 className="text-2xl font-black leading-tight mb-2">Suas<br/>18 Dezenas</h3>
-                    <button 
-                      onClick={handleAIGuess}
-                      disabled={isGeneratingAI || pool.status === PoolStatus.FINISHED}
-                      className="bg-white/10 hover:bg-white/20 p-3 rounded-2xl border border-white/20 transition-all flex items-center gap-2 group"
-                    >
-                      <svg className={`w-5 h-5 text-emerald-400 ${isGeneratingAI ? 'animate-spin' : 'group-hover:rotate-12'}`} fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-                      <span className="text-[10px] font-black uppercase tracking-widest">IA</span>
-                    </button>
                  </div>
                  <div className="grid grid-cols-6 gap-2 mt-6">
                    {Array.from({length: 18}).map((_, i) => {
@@ -286,27 +280,73 @@ const PoolDetail: React.FC<PoolDetailProps> = ({ pools, guesses, onSaveGuess, us
         )}
 
         {activeTab === 'participants' && (
-          <div className="space-y-3">
-            <div className="bg-white p-6 rounded-[32px] border border-gray-100 mb-6">
-               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Finanças do Grupo</p>
-               <div className="flex justify-between items-end">
-                  <div>
-                    <p className="text-xs font-bold text-gray-400">Prêmio Acumulado</p>
-                    <p className="text-2xl font-black text-emerald-600">{formatCurrency(finances.weeklyPrizePool)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-gray-300 uppercase">{pool.participantsIds.length} MEMBROS</p>
-                  </div>
-               </div>
-            </div>
-            {pool.participantsIds.map((pid, idx) => (
-              <div key={idx} className="flex items-center gap-4 p-4 bg-white rounded-3xl shadow-sm border border-gray-100">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xs">
-                  {idx + 1}
-                </div>
-                <p className="text-sm font-black text-gray-800">Participante #{pid.substring(0,4).toUpperCase()}</p>
+          <div className="space-y-5">
+            {isUserAdmin && (
+              <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Gerenciamento do Grupo</p>
+                 <div className="flex justify-between items-end mb-6">
+                    <div>
+                      <p className="text-xs font-bold text-gray-400">Prêmio Acumulado</p>
+                      <p className="text-2xl font-black text-emerald-600">{formatCurrency(finances.weeklyPrizePool)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-black text-gray-300 uppercase">{pool.participantsIds.length} MEMBROS</p>
+                    </div>
+                 </div>
+                 
+                 <div className="relative">
+                    <input 
+                      type="text"
+                      placeholder="Buscar participante por nome..."
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </div>
+                 </div>
               </div>
-            ))}
+            )}
+
+            <div className="space-y-4">
+              {isUserAdmin ? (
+                filteredGuesses.length > 0 ? (
+                  filteredGuesses.map((g, idx) => (
+                    <div key={g.id} className="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 space-y-4 animate-in fade-in duration-300">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs">
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-gray-800 text-sm">{g.userName || `Usuário ${g.userId.substring(0, 6)}`}</h4>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Palpite de 18 Números</p>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-6 gap-1.5 p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                        {g.numbers.sort((a, b) => a - b).map((n, i) => (
+                          <div key={i} className="aspect-square rounded-lg bg-white border border-gray-200 flex items-center justify-center text-[10px] font-black text-emerald-700 shadow-sm">
+                            {n.toString().padStart(2, '0')}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 opacity-30 italic font-black">Nenhum palpite encontrado</div>
+                )
+              ) : (
+                pool.participantsIds.map((pid, idx) => (
+                  <div key={idx} className="flex items-center gap-4 p-4 bg-white rounded-3xl shadow-sm border border-gray-100">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xs">
+                      {idx + 1}
+                    </div>
+                    <p className="text-sm font-black text-gray-800">Participante #{pid.substring(0,4).toUpperCase()}</p>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>

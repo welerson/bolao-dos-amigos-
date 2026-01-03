@@ -86,7 +86,6 @@ const App: React.FC = () => {
       const pool = pools.find(p => p.id === poolId);
       if (!pool) return;
 
-      // 1. Validar se o código existe e não foi usado
       const codesRef = collection(db, 'pool_codes');
       const q = query(codesRef, where('code', '==', code), where('poolId', '==', poolId), where('used', '==', false), limit(1));
       const querySnapshot = await getDocs(q);
@@ -99,13 +98,11 @@ const App: React.FC = () => {
       const codeDoc = querySnapshot.docs[0];
       const poolRef = doc(db, 'pools', poolId);
 
-      // 2. Marcar código como usado
       await updateDoc(doc(db, 'pool_codes', codeDoc.id), {
         used: true,
         usedBy: currentUser.id
       });
 
-      // 3. Adicionar usuário ao bolão
       const isFull = pool.participantsIds.length + 1 >= pool.capacity;
       await updateDoc(poolRef, {
         participantsIds: arrayUnion(currentUser.id),
@@ -120,9 +117,14 @@ const App: React.FC = () => {
   };
 
   const saveGuess = async (guess: Guess) => {
+    if (!currentUser) return;
     try {
       const guessId = `${guess.poolId}_${guess.userId}`;
-      await setDoc(doc(db, 'guesses', guessId), guess);
+      const guessData = {
+        ...guess,
+        userName: currentUser.name // Garante que o nome esteja no palpite
+      };
+      await setDoc(doc(db, 'guesses', guessId), guessData);
       addNotification("Seu palpite de 18 números foi salvo!");
     } catch (e) {
       addNotification("Erro ao salvar palpite.");

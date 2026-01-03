@@ -52,6 +52,7 @@ export interface Guess {
   id: string;
   poolId: string;
   userId: string;
+  userName?: string; // Nome do usuário para o Admin identificar
   numbers: number[]; // 18 numbers
 }
 
